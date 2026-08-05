@@ -1,3 +1,4 @@
+# Day 6: Added SentenceTransformer embeddings using all-MiniLM-L6-v2
 from sentence_transformers import SentenceTransformer
 
 # Load embedding model once
