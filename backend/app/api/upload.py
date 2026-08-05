@@ -1,21 +1,23 @@
 from fastapi import APIRouter, UploadFile, File
-from app.utils.pdf_extractor import extract_text
-from app.utils.image_extractor import extract_images
-import os
 import shutil
+import os
+
+from app.utils.extract_text import extract_text
+from app.utils.extract_images import extract_images
+from app.utils.text_chunker import chunk_text
 
 router = APIRouter()
 
-UPLOAD_DIR = "../data/pdfs"
-IMAGE_DIR = "../data/images"
+UPLOAD_FOLDER = "data/pdfs"
+IMAGE_FOLDER = "data/images"
 
-os.makedirs(UPLOAD_DIR, exist_ok=True)
-os.makedirs(IMAGE_DIR, exist_ok=True)
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+os.makedirs(IMAGE_FOLDER, exist_ok=True)
+
 
 @router.post("/upload")
 async def upload_pdf(file: UploadFile = File(...)):
-    # Save uploaded PDF
-    file_path = os.path.join(UPLOAD_DIR, file.filename)
+    file_path = os.path.join(UPLOAD_FOLDER, file.filename)
 
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
@@ -24,13 +26,16 @@ async def upload_pdf(file: UploadFile = File(...)):
     text = extract_text(file_path)
 
     # Extract images
-    image_count = extract_images(file_path, IMAGE_DIR)
+    image_count = extract_images(file_path, IMAGE_FOLDER)
 
-    # Return response
+    # Chunk text
+    chunks = chunk_text(text)
+
     return {
         "message": "PDF uploaded successfully",
         "filename": file.filename,
         "characters": len(text),
         "images": image_count,
-        "preview": text[:500]
+        "chunks": len(chunks),
+        "first_chunk": chunks[0] if chunks else ""
     }
