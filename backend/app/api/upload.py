@@ -38,10 +38,13 @@ async def upload_pdf(file: UploadFile = File(...)):
     # Generate embeddings
     embeddings = generate_embeddings(chunks)
 
-    # Store embeddings in FAISS
-    stored_vectors = create_faiss_index(embeddings)
+    # Store embeddings and chunks in FAISS
+    stored_vectors = create_faiss_index(
+        embeddings,
+        chunks
+    )
 
-    # API Response
+    # Return response
     return {
         "message": "PDF uploaded successfully",
         "filename": file.filename,

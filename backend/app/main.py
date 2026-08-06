@@ -1,15 +1,14 @@
 from fastapi import FastAPI
-from app.api.upload import router as upload_router
 
-app = FastAPI(
-    title="OmniBrain API",
-    version="1.0.0"
-)
+from app.api.upload import router as upload_router
+from app.api.chat import router as chat_router
+
+app = FastAPI(title="OmniBrain API")
 
 app.include_router(upload_router)
+app.include_router(chat_router)
+
 
 @app.get("/")
 def home():
-    return {
-        "message": "Welcome to OmniBrain 🚀"
-    }
+    return {"message": "Welcome to OmniBrain API"}
