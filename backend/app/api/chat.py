@@ -1,11 +1,8 @@
 from fastapi import APIRouter
 from pydantic import BaseModel
 
-from app.retrieval.search import search_documents
-from app.retrieval.prompt_builder import build_prompt
-from app.llm.generator import generate_answer
+from app.agents.workflow.graph import chat_graph
 from app.memory.conversation import ConversationMemory
-
 
 router = APIRouter()
 
@@ -19,37 +16,21 @@ class ChatRequest(BaseModel):
 @router.post("/chat")
 async def chat(request: ChatRequest):
 
-    # Retrieve relevant chunks
-    docs = search_documents(request.question)
-
-    # Build prompt
-    prompt = build_prompt(
-        request.question,
-        docs
-    )
-
-    # Add previous conversation
+    # Get previous conversation
     history = memory.get_history()
 
-    if history:
-        conversation = "\n\n".join(
-            [
-                f"User: {item['question']}\n"
-                f"Assistant: {item['answer']}"
-                for item in history
-            ]
-        )
+    # Run LangGraph workflow
+    result = chat_graph.invoke(
+        {
+            "question": request.question,
+            "documents": [],
+            "answer": "",
+            "history": history
+        }
+    )
 
-        prompt = f"""
-Previous conversation:
-
-{conversation}
-
-{prompt}
-"""
-
-    # Generate answer
-    answer = generate_answer(prompt)
+    # Get final answer
+    answer = result["answer"]
 
     # Save conversation
     memory.add_message(
@@ -59,7 +40,7 @@ Previous conversation:
 
     return {
         "question": request.question,
-        "retrieved_chunks": len(docs),
+        "retrieved_chunks": len(result["documents"]),
         "answer": answer,
         "conversation_length": len(memory.get_history())
     }
