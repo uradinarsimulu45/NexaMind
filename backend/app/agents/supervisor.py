@@ -1,14 +1,13 @@
 def supervisor_agent(state):
     """
     Supervisor Agent
-
-    Decides the order in which the agents should run.
+    Decides which agent should run next.
     """
 
     if not state.get("documents"):
-        return "retrieve"
+        return {"next": "retrieve"}
 
     if not state.get("answer"):
-        return "generate"
+        return {"next": "generate"}
 
-    return "end"
+    return {"next": "end"}

@@ -11,13 +11,15 @@ class ChatState(TypedDict):
     question: str
     documents: list
     answer: str
+    next: str
+
+
+def supervisor_node(state: ChatState):
+    return supervisor_agent(state)
 
 
 def retrieve_node(state: ChatState):
-
-    documents = retrieval_agent(
-        state["question"]
-    )
+    documents = retrieval_agent(state["question"])
 
     return {
         "documents": documents
@@ -25,7 +27,6 @@ def retrieve_node(state: ChatState):
 
 
 def generate_node(state: ChatState):
-
     answer = generation_agent(
         state["question"],
         state["documents"]
@@ -36,40 +37,46 @@ def generate_node(state: ChatState):
     }
 
 
-def supervisor_node(state: ChatState):
-
-    return supervisor_agent(state)
-
-
 graph_builder = StateGraph(ChatState)
 
-# Agents
-graph_builder.add_node(
-    "retrieve",
-    retrieve_node
-)
 
-graph_builder.add_node(
-    "generate",
-    generate_node
-)
+# Add nodes
+graph_builder.add_node("supervisor", supervisor_node)
+graph_builder.add_node("retrieve", retrieve_node)
+graph_builder.add_node("generate", generate_node)
 
-# Start
+
+# START → Supervisor
 graph_builder.add_edge(
     START,
-    "retrieve"
+    "supervisor"
 )
 
-# Retrieval → Generation
+
+# Supervisor decides next agent
+graph_builder.add_conditional_edges(
+    "supervisor",
+    lambda state: state["next"],
+    {
+        "retrieve": "retrieve",
+        "generate": "generate",
+        "end": END
+    }
+)
+
+
+# Retrieval → Supervisor
 graph_builder.add_edge(
     "retrieve",
-    "generate"
+    "supervisor"
 )
 
-# Generation → End
+
+# Generation → Supervisor
 graph_builder.add_edge(
     "generate",
-    END
+    "supervisor"
 )
+
 
 chat_graph = graph_builder.compile()
