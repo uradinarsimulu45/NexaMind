@@ -1,6 +1,6 @@
-def chunk_text(text, chunk_size=500, overlap=50):
+def chunk_text(text, chunk_size=2000, overlap=300):
     """
-    Split text into overlapping chunks.
+    Split text into larger chunks while preserving more context.
     """
 
     chunks = []
@@ -8,7 +8,12 @@ def chunk_text(text, chunk_size=500, overlap=50):
 
     while start < len(text):
         end = start + chunk_size
-        chunks.append(text[start:end])
+
+        chunk = text[start:end].strip()
+
+        if chunk:
+            chunks.append(chunk)
+
         start += chunk_size - overlap
 
     return chunks
