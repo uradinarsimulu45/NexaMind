@@ -4,28 +4,31 @@ from langgraph.graph import StateGraph, START, END
 
 from app.agents.retrieval_agent import retrieval_agent
 from app.agents.generation_agent import generation_agent
-from app.agents.supervisor import supervisor_agent
 
 
 class ChatState(TypedDict):
     question: str
     documents: list
     answer: str
-    next: str
+    history: list
 
 
-def supervisor_node(state: ChatState):
-    return supervisor_agent(state)
-
-
+# -----------------------------
+# Retrieval node
+# -----------------------------
 def retrieve_node(state: ChatState):
-    documents = retrieval_agent(state["question"])
+    documents = retrieval_agent(
+        state["question"]
+    )
 
     return {
         "documents": documents
     }
 
 
+# -----------------------------
+# Generation node
+# -----------------------------
 def generate_node(state: ChatState):
     answer = generation_agent(
         state["question"],
@@ -37,26 +40,47 @@ def generate_node(state: ChatState):
     }
 
 
+# -----------------------------
+# Supervisor ROUTER
+# -----------------------------
+def supervisor_router(state: ChatState):
+
+    # No documents yet → retrieve
+    if not state.get("documents"):
+        return "retrieve"
+
+    # Documents exist but no answer → generate
+    if not state.get("answer"):
+        return "generate"
+
+    # Answer exists → finish
+    return "end"
+
+
+# -----------------------------
+# Build graph
+# -----------------------------
 graph_builder = StateGraph(ChatState)
 
 
-# Add nodes
-graph_builder.add_node("supervisor", supervisor_node)
-graph_builder.add_node("retrieve", retrieve_node)
-graph_builder.add_node("generate", generate_node)
+# Add only REAL state-update nodes
+graph_builder.add_node(
+    "retrieve",
+    retrieve_node
+)
 
-
-# START → Supervisor
-graph_builder.add_edge(
-    START,
-    "supervisor"
+graph_builder.add_node(
+    "generate",
+    generate_node
 )
 
 
-# Supervisor decides next agent
+# -----------------------------
+# START → Supervisor router
+# -----------------------------
 graph_builder.add_conditional_edges(
-    "supervisor",
-    lambda state: state["next"],
+    START,
+    supervisor_router,
     {
         "retrieve": "retrieve",
         "generate": "generate",
@@ -65,18 +89,28 @@ graph_builder.add_conditional_edges(
 )
 
 
-# Retrieval → Supervisor
-graph_builder.add_edge(
+# -----------------------------
+# Retrieval → Supervisor router
+# -----------------------------
+graph_builder.add_conditional_edges(
     "retrieve",
-    "supervisor"
+    supervisor_router,
+    {
+        "retrieve": "retrieve",
+        "generate": "generate",
+        "end": END
+    }
 )
 
 
-# Generation → Supervisor
+# -----------------------------
+# Generation → END
+# -----------------------------
 graph_builder.add_edge(
     "generate",
-    "supervisor"
+    END
 )
 
 
+# Compile
 chat_graph = graph_builder.compile()
