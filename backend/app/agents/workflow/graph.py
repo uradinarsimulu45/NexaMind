@@ -41,19 +41,30 @@ def generate_node(state: ChatState):
 
 
 # -----------------------------
-# Supervisor ROUTER
+# SUPERVISOR ROUTER
 # -----------------------------
 def supervisor_router(state: ChatState):
+    """
+    Decide which node should execute next.
 
-    # No documents yet → retrieve
-    if not state.get("documents"):
+    Routing:
+        No documents -> retrieve
+        Documents but no answer -> generate
+        Answer exists -> end
+    """
+
+    documents = state.get("documents", [])
+    answer = state.get("answer", "")
+
+    # Step 1: Retrieve relevant documents
+    if not documents:
         return "retrieve"
 
-    # Documents exist but no answer → generate
-    if not state.get("answer"):
+    # Step 2: Generate answer from retrieved documents
+    if not answer:
         return "generate"
 
-    # Answer exists → finish
+    # Step 3: Finish workflow
     return "end"
 
 
@@ -63,7 +74,9 @@ def supervisor_router(state: ChatState):
 graph_builder = StateGraph(ChatState)
 
 
-# Add only REAL state-update nodes
+# -----------------------------
+# Add nodes
+# -----------------------------
 graph_builder.add_node(
     "retrieve",
     retrieve_node
@@ -76,7 +89,7 @@ graph_builder.add_node(
 
 
 # -----------------------------
-# START → Supervisor router
+# START -> Supervisor
 # -----------------------------
 graph_builder.add_conditional_edges(
     START,
@@ -90,7 +103,7 @@ graph_builder.add_conditional_edges(
 
 
 # -----------------------------
-# Retrieval → Supervisor router
+# Retrieve -> Supervisor
 # -----------------------------
 graph_builder.add_conditional_edges(
     "retrieve",
@@ -104,7 +117,7 @@ graph_builder.add_conditional_edges(
 
 
 # -----------------------------
-# Generation → END
+# Generate -> END
 # -----------------------------
 graph_builder.add_edge(
     "generate",
@@ -112,5 +125,7 @@ graph_builder.add_edge(
 )
 
 
+# -----------------------------
 # Compile
+# -----------------------------
 chat_graph = graph_builder.compile()
