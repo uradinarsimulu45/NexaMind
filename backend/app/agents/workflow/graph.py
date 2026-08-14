@@ -4,6 +4,7 @@ from langgraph.graph import StateGraph, START, END
 
 from app.agents.retrieval_agent import retrieval_agent
 from app.agents.generation_agent import generation_agent
+from app.agents.vision.vision_agent import vision_agent
 
 
 class ChatState(TypedDict):
@@ -11,12 +12,15 @@ class ChatState(TypedDict):
     documents: list
     answer: str
     history: list
+    vision_result: str
 
 
-# -----------------------------
+# ---------------------------------
 # Retrieval node
-# -----------------------------
+# ---------------------------------
+
 def retrieve_node(state: ChatState):
+
     documents = retrieval_agent(
         state["question"]
     )
@@ -26,13 +30,45 @@ def retrieve_node(state: ChatState):
     }
 
 
-# -----------------------------
+# ---------------------------------
+# Vision node
+# ---------------------------------
+
+def vision_node(state: ChatState):
+
+    # For Day 16, use a known extracted NASA image.
+    image_path = "data/images/page_14_img_65.jpeg"
+
+    result = vision_agent(image_path)
+
+    return {
+        "vision_result": result
+    }
+
+
+# ---------------------------------
 # Generation node
-# -----------------------------
+# ---------------------------------
+
 def generate_node(state: ChatState):
+
+    documents = state.get("documents", [])
+
+    vision_result = state.get("vision_result", "")
+
+    # Add vision information only when available.
+    if vision_result:
+        documents = documents + [
+            {
+                "text": f"Visual information: {vision_result}",
+                "source": "vision_agent",
+                "page": 14
+            }
+        ]
+
     answer = generation_agent(
         state["question"],
-        state["documents"]
+        documents
     )
 
     return {
@@ -40,46 +76,58 @@ def generate_node(state: ChatState):
     }
 
 
-# -----------------------------
-# SUPERVISOR ROUTER
-# -----------------------------
+# ---------------------------------
+# Supervisor router
+# ---------------------------------
+
 def supervisor_router(state: ChatState):
-    """
-    Decide which node should execute next.
 
-    Routing:
-        No documents -> retrieve
-        Documents but no answer -> generate
-        Answer exists -> end
-    """
+    question = state["question"].lower()
 
-    documents = state.get("documents", [])
-    answer = state.get("answer", "")
+    # Visual questions
+    visual_keywords = [
+        "image",
+        "picture",
+        "figure",
+        "diagram",
+        "chart",
+        "graph",
+        "visual",
+        "shown",
+        "spacecraft",
+        "planet"
+    ]
 
-    # Step 1: Retrieve relevant documents
-    if not documents:
+    if any(word in question for word in visual_keywords):
+        if not state.get("vision_result"):
+            return "vision"
+
+    # Normal RAG retrieval
+    if not state.get("documents"):
         return "retrieve"
 
-    # Step 2: Generate answer from retrieved documents
-    if not answer:
+    # Generate final answer
+    if not state.get("answer"):
         return "generate"
 
-    # Step 3: Finish workflow
     return "end"
 
 
-# -----------------------------
-# Build graph
-# -----------------------------
+# ---------------------------------
+# Build LangGraph
+# ---------------------------------
+
 graph_builder = StateGraph(ChatState)
 
 
-# -----------------------------
-# Add nodes
-# -----------------------------
 graph_builder.add_node(
     "retrieve",
     retrieve_node
+)
+
+graph_builder.add_node(
+    "vision",
+    vision_node
 )
 
 graph_builder.add_node(
@@ -88,44 +136,66 @@ graph_builder.add_node(
 )
 
 
-# -----------------------------
-# START -> Supervisor
-# -----------------------------
+# ---------------------------------
+# START → Supervisor
+# ---------------------------------
+
 graph_builder.add_conditional_edges(
     START,
     supervisor_router,
     {
         "retrieve": "retrieve",
+        "vision": "vision",
         "generate": "generate",
         "end": END
     }
 )
 
 
-# -----------------------------
-# Retrieve -> Supervisor
-# -----------------------------
+# ---------------------------------
+# Retrieval → Supervisor
+# ---------------------------------
+
 graph_builder.add_conditional_edges(
     "retrieve",
     supervisor_router,
     {
         "retrieve": "retrieve",
+        "vision": "vision",
         "generate": "generate",
         "end": END
     }
 )
 
 
-# -----------------------------
-# Generate -> END
-# -----------------------------
+# ---------------------------------
+# Vision → Supervisor
+# ---------------------------------
+
+graph_builder.add_conditional_edges(
+    "vision",
+    supervisor_router,
+    {
+        "retrieve": "retrieve",
+        "vision": "vision",
+        "generate": "generate",
+        "end": END
+    }
+)
+
+
+# ---------------------------------
+# Generation → END
+# ---------------------------------
+
 graph_builder.add_edge(
     "generate",
     END
 )
 
 
-# -----------------------------
+# ---------------------------------
 # Compile
-# -----------------------------
+# ---------------------------------
+
 chat_graph = graph_builder.compile()
