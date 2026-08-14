@@ -5,6 +5,7 @@ from langgraph.graph import StateGraph, START, END
 from app.agents.retrieval_agent import retrieval_agent
 from app.agents.generation_agent import generation_agent
 from app.agents.vision.vision_agent import vision_agent
+from app.agents.vision.image_selector import select_image
 
 
 class ChatState(TypedDict):
@@ -35,15 +36,17 @@ def retrieve_node(state: ChatState):
 # ---------------------------------
 
 def vision_node(state: ChatState):
-
-    # For Day 16, use a known extracted NASA image.
-    image_path = "data/images/page_14_img_65.jpeg"
-
+    question = state["question"]
+    image_path = select_image(question)
+    if not image_path:
+        return {
+            "vision_result":""
+        }
     result = vision_agent(image_path)
-
     return {
         "vision_result": result
     }
+
 
 
 # ---------------------------------
