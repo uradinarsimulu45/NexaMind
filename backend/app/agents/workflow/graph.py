@@ -5,7 +5,6 @@ from langgraph.graph import StateGraph, START, END
 from app.agents.retrieval_agent import retrieval_agent
 from app.agents.generation_agent import generation_agent
 from app.agents.vision.vision_agent import vision_agent
-from app.agents.vision.image_selector import select_image
 
 
 class ChatState(TypedDict):
@@ -21,7 +20,6 @@ class ChatState(TypedDict):
 # ---------------------------------
 
 def retrieve_node(state: ChatState):
-
     documents = retrieval_agent(
         state["question"]
     )
@@ -36,17 +34,20 @@ def retrieve_node(state: ChatState):
 # ---------------------------------
 
 def vision_node(state: ChatState):
-    question = state["question"]
-    image_path = select_image(question)
-    if not image_path:
-        return {
-            "vision_result":""
-        }
+    """
+    Analyze an extracted image for visual questions.
+
+    For now, Day 19 uses the known NASA image.
+    Later we will connect automatic image selection.
+    """
+
+    image_path = "data/images/page_14_img_65.jpeg"
+
     result = vision_agent(image_path)
+
     return {
         "vision_result": result
     }
-
 
 
 # ---------------------------------
@@ -56,18 +57,27 @@ def vision_node(state: ChatState):
 def generate_node(state: ChatState):
 
     documents = state.get("documents", [])
-
     vision_result = state.get("vision_result", "")
 
-    # Add vision information only when available.
+    # ---------------------------------
+    # Visual evidence
+    # ---------------------------------
+
     if vision_result:
+
         documents = documents + [
             {
-                "text": f"Visual information: {vision_result}",
+                "text": (
+                    f"Visual information: {vision_result}"
+                ),
                 "source": "vision_agent",
                 "page": 14
             }
         ]
+
+    # ---------------------------------
+    # Generate answer
+    # ---------------------------------
 
     answer = generation_agent(
         state["question"],
@@ -87,10 +97,14 @@ def supervisor_router(state: ChatState):
 
     question = state["question"].lower()
 
-    # Visual questions
+    # ---------------------------------
+    # Visual question detection
+    # ---------------------------------
+
     visual_keywords = [
         "image",
         "picture",
+        "photo",
         "figure",
         "diagram",
         "chart",
@@ -98,21 +112,46 @@ def supervisor_router(state: ChatState):
         "visual",
         "shown",
         "spacecraft",
-        "planet"
+        "planet",
+        "rocket",
+        "satellite",
+        "moon"
     ]
 
-    if any(word in question for word in visual_keywords):
+    is_visual_question = any(
+        word in question
+        for word in visual_keywords
+    )
+
+    # ---------------------------------
+    # VISUAL WORKFLOW
+    # ---------------------------------
+
+    if is_visual_question:
+
+        # First analyze the image
         if not state.get("vision_result"):
             return "vision"
 
-    # Normal RAG retrieval
+        # Vision evidence exists → generate answer
+        if not state.get("answer"):
+            return "generate"
+
+        return "end"
+
+    # ---------------------------------
+    # NORMAL RAG WORKFLOW
+    # ---------------------------------
+
+    # No documents → retrieve from FAISS
     if not state.get("documents"):
         return "retrieve"
 
-    # Generate final answer
+    # Documents exist → generate answer
     if not state.get("answer"):
         return "generate"
 
+    # Answer exists → finish
     return "end"
 
 
@@ -122,6 +161,10 @@ def supervisor_router(state: ChatState):
 
 graph_builder = StateGraph(ChatState)
 
+
+# ---------------------------------
+# Add nodes
+# ---------------------------------
 
 graph_builder.add_node(
     "retrieve",
@@ -198,7 +241,7 @@ graph_builder.add_edge(
 
 
 # ---------------------------------
-# Compile
+# Compile graph
 # ---------------------------------
 
 chat_graph = graph_builder.compile()
