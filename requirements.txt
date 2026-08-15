@@ -2,19 +2,23 @@ fastapi
 uvicorn
 python-multipart
 
+streamlit
+
 pymupdf
 
-sentence-transformers
-faiss-cpu
 numpy
+faiss-cpu
+sentence-transformers
 
 transformers
 torch
+torchvision
 accelerate
 sentencepiece
 
 langchain
 langchain-community
 langchain-core
+langgraph
 
 pydantic
