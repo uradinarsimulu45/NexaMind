@@ -5,6 +5,7 @@ python-multipart
 streamlit
 
 pymupdf
+pillow
 
 numpy
 faiss-cpu
@@ -12,7 +13,6 @@ sentence-transformers
 
 transformers
 torch
-torchvision
 accelerate
 sentencepiece
 
