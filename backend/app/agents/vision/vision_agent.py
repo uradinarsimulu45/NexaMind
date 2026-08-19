@@ -1,7 +1,6 @@
 from PIL import Image
 from transformers import BlipProcessor, BlipForConditionalGeneration
 
-
 MODEL_NAME = "Salesforce/blip-image-captioning-base"
 
 processor = None
@@ -12,29 +11,16 @@ def load_model():
     global processor, model
 
     if processor is None or model is None:
-        print("Loading BLIP vision model...")
+        processor = BlipProcessor.from_pretrained(MODEL_NAME)
+        model = BlipForConditionalGeneration.from_pretrained(MODEL_NAME)
 
-        processor = BlipProcessor.from_pretrained(
-            MODEL_NAME
-        )
-
-        model = BlipForConditionalGeneration.from_pretrained(
-            MODEL_NAME
-        )
-
-        print("BLIP vision model loaded.")
+    return processor, model
 
 
 def vision_agent(image_path: str) -> str:
-    """
-    Analyze an image and generate a textual description.
-    """
+    processor, model = load_model()
 
-    load_model()
-
-    image = Image.open(
-        image_path
-    ).convert("RGB")
+    image = Image.open(image_path).convert("RGB")
 
     inputs = processor(
         images=image,
