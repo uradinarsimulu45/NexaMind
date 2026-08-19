@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import TypedDict
 
 from langgraph.graph import StateGraph, START, END
@@ -6,6 +7,17 @@ from app.agents.retrieval_agent import retrieval_agent
 from app.agents.generation_agent import generation_agent
 from app.agents.vision.vision_agent import vision_agent
 
+
+# ---------------------------------
+# Project root
+# ---------------------------------
+
+ROOT_DIR = Path(__file__).resolve().parents[4]
+
+
+# ---------------------------------
+# Chat state
+# ---------------------------------
 
 class ChatState(TypedDict):
     question: str
@@ -20,6 +32,7 @@ class ChatState(TypedDict):
 # ---------------------------------
 
 def retrieve_node(state: ChatState):
+
     documents = retrieval_agent(
         state["question"]
     )
@@ -34,16 +47,26 @@ def retrieve_node(state: ChatState):
 # ---------------------------------
 
 def vision_node(state: ChatState):
-    """
-    Analyze an extracted image for visual questions.
 
-    For now, Day 19 uses the known NASA image.
-    Later we will connect automatic image selection.
-    """
+    image_path = (
+        ROOT_DIR
+        / "backend"
+        / "data"
+        / "images"
+        / "page_14_img_65.jpeg"
+    )
 
-    image_path = "data/images/page_14_img_65.jpeg"
+    # Check image exists
+    if not image_path.exists():
+        return {
+            "vision_result": (
+                f"Vision image not found: {image_path}"
+            )
+        }
 
-    result = vision_agent(image_path)
+    result = vision_agent(
+        str(image_path)
+    )
 
     return {
         "vision_result": result
@@ -56,11 +79,18 @@ def vision_node(state: ChatState):
 
 def generate_node(state: ChatState):
 
-    documents = state.get("documents", [])
-    vision_result = state.get("vision_result", "")
+    documents = state.get(
+        "documents",
+        []
+    )
+
+    vision_result = state.get(
+        "vision_result",
+        ""
+    )
 
     # ---------------------------------
-    # Visual evidence
+    # Add visual evidence
     # ---------------------------------
 
     if vision_result:
@@ -68,7 +98,8 @@ def generate_node(state: ChatState):
         documents = documents + [
             {
                 "text": (
-                    f"Visual information: {vision_result}"
+                    f"Visual information: "
+                    f"{vision_result}"
                 ),
                 "source": "vision_agent",
                 "page": 14
@@ -93,7 +124,9 @@ def generate_node(state: ChatState):
 # Supervisor router
 # ---------------------------------
 
-def supervisor_router(state: ChatState):
+def supervisor_router(
+    state: ChatState
+):
 
     question = state["question"].lower()
 
@@ -124,34 +157,37 @@ def supervisor_router(state: ChatState):
     )
 
     # ---------------------------------
-    # VISUAL WORKFLOW
+    # Visual workflow
     # ---------------------------------
 
     if is_visual_question:
 
-        # First analyze the image
-        if not state.get("vision_result"):
+        if not state.get(
+            "vision_result"
+        ):
             return "vision"
 
-        # Vision evidence exists → generate answer
-        if not state.get("answer"):
+        if not state.get(
+            "answer"
+        ):
             return "generate"
 
         return "end"
 
     # ---------------------------------
-    # NORMAL RAG WORKFLOW
+    # Normal RAG workflow
     # ---------------------------------
 
-    # No documents → retrieve from FAISS
-    if not state.get("documents"):
+    if not state.get(
+        "documents"
+    ):
         return "retrieve"
 
-    # Documents exist → generate answer
-    if not state.get("answer"):
+    if not state.get(
+        "answer"
+    ):
         return "generate"
 
-    # Answer exists → finish
     return "end"
 
 
@@ -159,7 +195,9 @@ def supervisor_router(state: ChatState):
 # Build LangGraph
 # ---------------------------------
 
-graph_builder = StateGraph(ChatState)
+graph_builder = StateGraph(
+    ChatState
+)
 
 
 # ---------------------------------
