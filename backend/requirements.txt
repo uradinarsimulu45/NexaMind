@@ -6,15 +6,9 @@ streamlit
 
 pymupdf
 pillow
-
 numpy
 faiss-cpu
 sentence-transformers
-
-transformers
-torch
-accelerate
-sentencepiece
 
 langchain
 langchain-community
