@@ -1,18 +1,12 @@
-import sys
-from pathlib import Path
-
+import requests
 import streamlit as st
 
 
 # ============================================================
-# PATH CONFIGURATION
+# CONFIG
 # ============================================================
 
-ROOT_DIR = Path(__file__).resolve().parent.parent
-BACKEND_DIR = ROOT_DIR / "backend"
-
-if str(BACKEND_DIR) not in sys.path:
-    sys.path.insert(0, str(BACKEND_DIR))
+API_URL = "http://127.0.0.1:8000"
 
 
 # ============================================================
@@ -32,90 +26,195 @@ st.set_page_config(
 
 st.title("🧠 OmniBrain")
 
-st.subheader("Agentic Multi-Modal RAG Orchestrator")
+st.subheader(
+    "Agentic Multi-Modal RAG Orchestrator"
+)
 
 st.write(
-    "Ask questions about your documents and let OmniBrain "
-    "retrieve the relevant information and generate an answer."
+    "Upload a document and ask questions about its contents."
 )
 
 st.divider()
 
 
 # ============================================================
-# LOAD LANGGRAPH ONLY WHEN NEEDED
+# BACKEND HEALTH CHECK
 # ============================================================
 
-@st.cache_resource(show_spinner=False)
-def load_chat_graph():
-    """
-    Load LangGraph only once.
+try:
 
-    This prevents the Hugging Face / transformer models
-    from loading every time Streamlit reruns the page.
-    """
+    response = requests.get(
+        f"{API_URL}/",
+        timeout=5
+    )
 
-    from app.agents.workflow.graph import chat_graph
+    if response.status_code == 200:
+        st.success("🟢 OmniBrain backend is online")
 
-    return chat_graph
+    else:
+        st.warning("Backend responded with an unexpected status.")
+
+except requests.exceptions.RequestException:
+
+    st.error(
+        "🔴 Backend is not running. "
+        "Start FastAPI on port 8000."
+    )
+
+    st.stop()
 
 
 # ============================================================
 # PDF UPLOAD
 # ============================================================
 
+st.header("📄 Upload Document")
+
 uploaded_file = st.file_uploader(
-    "📄 Upload a PDF",
-    type=["pdf"],
+    "Choose a PDF",
+    type=["pdf"]
 )
+
 
 if uploaded_file is not None:
 
-    st.success(
-        f"Uploaded: {uploaded_file.name}"
+    st.write(
+        f"Selected file: **{uploaded_file.name}**"
     )
 
-    # Save uploaded PDF temporarily
-    upload_dir = ROOT_DIR / "data" / "uploads"
-    upload_dir.mkdir(
-        parents=True,
-        exist_ok=True,
+    if st.button(
+        "📥 Process PDF",
+        use_container_width=True
+    ):
+
+        with st.spinner(
+            "Processing PDF..."
+        ):
+
+            try:
+
+                files = {
+                    "file": (
+                        uploaded_file.name,
+                        uploaded_file.getvalue(),
+                        "application/pdf"
+                    )
+                }
+
+                response = requests.post(
+                    f"{API_URL}/upload",
+                    files=files,
+                    timeout=300
+                )
+
+
+                # --------------------------------------------
+                # SUCCESS
+                # --------------------------------------------
+
+                if response.status_code == 200:
+
+                    result = response.json()
+
+                    st.session_state[
+                        "document_processed"
+                    ] = True
+
+                    st.session_state[
+                        "upload_result"
+                    ] = result
+
+                    st.success(
+                        "✅ PDF processed successfully!"
+                    )
+
+                else:
+
+                    st.error(
+                        f"Upload failed: "
+                        f"{response.status_code}"
+                    )
+
+                    st.code(
+                        response.text
+                    )
+
+            except requests.exceptions.RequestException as e:
+
+                st.error(
+                    "❌ Could not connect to FastAPI."
+                )
+
+                st.exception(e)
+
+
+# ============================================================
+# SHOW PROCESSING INFORMATION
+# ============================================================
+
+if "upload_result" in st.session_state:
+
+    result = st.session_state[
+        "upload_result"
+    ]
+
+    st.divider()
+
+    st.subheader(
+        "📊 Document Information"
     )
 
-    pdf_path = upload_dir / uploaded_file.name
+    col1, col2, col3, col4 = st.columns(4)
 
-    with open(pdf_path, "wb") as f:
-        f.write(uploaded_file.getbuffer())
+    with col1:
+        st.metric(
+            "Pages",
+            result.get("pages", 0)
+        )
 
-    st.info(
-        f"PDF saved successfully: {pdf_path.name}"
-    )
+    with col2:
+        st.metric(
+            "Images",
+            result.get("images", 0)
+        )
 
+    with col3:
+        st.metric(
+            "Chunks",
+            result.get("chunks", 0)
+        )
 
-st.divider()
+    with col4:
+        st.metric(
+            "Vectors",
+            result.get("stored_vectors", 0)
+        )
 
 
 # ============================================================
 # QUESTION
 # ============================================================
 
+st.divider()
+
+st.header("💬 Ask a question")
+
 question = st.text_input(
-    "💬 Ask a question",
+    "Question",
     placeholder=(
-        "Example: How much funding is requested "
-        "for Gateway development?"
-    ),
+        "Ask something about your uploaded document..."
+    )
 )
 
 
 # ============================================================
-# ASK BUTTON
+# ASK OMNIBRAIN
 # ============================================================
 
 if st.button(
     "🚀 Ask OmniBrain",
     type="primary",
-    use_container_width=True,
+    use_container_width=True
 ):
 
     if not question.strip():
@@ -124,101 +223,105 @@ if st.button(
             "Please enter a question."
         )
 
+    elif "document_processed" not in st.session_state:
+
+        st.warning(
+            "Please upload and process a PDF first."
+        )
+
     else:
 
-        # ----------------------------------------------------
-        # LOAD GRAPH
-        # ----------------------------------------------------
-
         with st.spinner(
-            "🧠 Loading OmniBrain..."
+            "🧠 OmniBrain is thinking..."
         ):
 
             try:
 
-                chat_graph = load_chat_graph()
-
-            except Exception as e:
-
-                st.error(
-                    "Failed to load OmniBrain."
+                response = requests.post(
+                    f"{API_URL}/chat",
+                    json={
+                        "question": question
+                    },
+                    timeout=300
                 )
 
-                st.exception(e)
 
-                st.stop()
+                # ----------------------------------------
+                # SUCCESS
+                # ----------------------------------------
+
+                if response.status_code == 200:
+
+                    result = response.json()
+
+                    answer = result.get(
+                        "answer",
+                        ""
+                    )
+
+                    st.divider()
+
+                    st.subheader(
+                        "🤖 Answer"
+                    )
+
+                    if answer:
+
+                        st.success(
+                            answer
+                        )
+
+                    else:
+
+                        st.warning(
+                            "No answer was generated."
+                        )
 
 
-        # ----------------------------------------------------
-        # RUN QUERY
-        # ----------------------------------------------------
+                    # ----------------------------------------
+                    # DEBUG
+                    # ----------------------------------------
 
-        with st.spinner(
-            "🔎 Searching documents and generating answer..."
-        ):
+                    with st.expander(
+                        "🔧 Debug information"
+                    ):
 
-            try:
+                        st.write(
+                            "Question:",
+                            question
+                        )
 
-                result = chat_graph.invoke(
-                    {
-                        "question": question,
-                        "documents": [],
-                        "answer": "",
-                        "history": [],
-                        "vision_result": "",
-                    }
-                )
+                        st.write(
+                            "Retrieved chunks:",
+                            result.get(
+                                "retrieved_chunks",
+                                0
+                            )
+                        )
 
-                # --------------------------------------------
-                # GET ANSWER
-                # --------------------------------------------
-
-                answer = result.get(
-                    "answer",
-                    "",
-                )
-
-                st.divider()
-
-                st.subheader(
-                    "🤖 Answer"
-                )
-
-                if answer:
-
-                    st.success(answer)
+                        st.write(
+                            "Conversation length:",
+                            result.get(
+                                "conversation_length",
+                                0
+                            )
+                        )
 
                 else:
 
-                    st.warning(
-                        "The answer is not available "
-                        "in the provided documents."
+                    st.error(
+                        f"Chat request failed: "
+                        f"{response.status_code}"
                     )
 
-
-                # --------------------------------------------
-                # DEBUG INFORMATION
-                # --------------------------------------------
-
-                with st.expander(
-                    "🔧 Debug information"
-                ):
-
-                    st.write(
-                        "Question:",
-                        question,
+                    st.code(
+                        response.text
                     )
 
-                    st.write(
-                        "Result:",
-                        result,
-                    )
-
-
-            except Exception as e:
+            except requests.exceptions.RequestException as e:
 
                 st.error(
-                    "❌ OmniBrain error"
+                    "❌ Could not connect to FastAPI."
                 )
 
                 st.exception(e)
