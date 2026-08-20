@@ -12,3 +12,8 @@ app.include_router(chat_router)
 @app.get("/")
 def home():
     return {"message": "Welcome to OmniBrain API"}
+
+
+@app.get("/health")
+def health():
+    return {"status": "ok"}
