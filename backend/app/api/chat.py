@@ -1,7 +1,6 @@
 from fastapi import APIRouter
 from pydantic import BaseModel
 
-from app.agents.workflow.graph import chat_graph
 from app.memory.conversation import ConversationMemory
 
 router = APIRouter()
@@ -13,26 +12,30 @@ class ChatRequest(BaseModel):
     question: str
 
 
+def load_chat_graph():
+    from app.agents.workflow.graph import chat_graph
+    return chat_graph
+
+
 @router.post("/chat")
 async def chat(request: ChatRequest):
 
-    # Get previous conversation
     history = memory.get_history()
 
-    # Run LangGraph workflow
+    chat_graph = load_chat_graph()
+
     result = chat_graph.invoke(
         {
             "question": request.question,
             "documents": [],
             "answer": "",
-            "history": history
+            "history": history,
+            "vision_result": "",
         }
     )
 
-    # Get final answer
-    answer = result["answer"]
+    answer = result.get("answer", "")
 
-    # Save conversation
     memory.add_message(
         request.question,
         answer
@@ -40,7 +43,7 @@ async def chat(request: ChatRequest):
 
     return {
         "question": request.question,
-        "retrieved_chunks": len(result["documents"]),
+        "retrieved_chunks": len(result.get("documents", [])),
         "answer": answer,
         "conversation_length": len(memory.get_history())
     }
