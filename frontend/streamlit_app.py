@@ -45,23 +45,48 @@ try:
 
     response = requests.get(
         f"{API_URL}/",
-        timeout=5
+        timeout=60
     )
 
     if response.status_code == 200:
-        st.success("🟢 OmniBrain backend is online")
+
+        st.success(
+            "🟢 OmniBrain backend is online"
+        )
 
     else:
-        st.warning("Backend responded with an unexpected status.")
 
-except requests.exceptions.RequestException:
+        st.warning(
+            f"Backend returned HTTP {response.status_code}"
+        )
+
+except requests.exceptions.RequestException as e:
 
     st.error(
-        "🔴 Backend is not running. "
-        "Start FastAPI on port 8000."
+        "🔴 Could not connect to the OmniBrain backend."
     )
 
+    st.caption(
+        f"Backend: {API_URL}"
+    )
+
+    st.exception(e)
+
     st.stop()
+
+
+# ============================================================
+# SESSION STATE
+# ============================================================
+
+if "document_id" not in st.session_state:
+    st.session_state["document_id"] = None
+
+if "document_processed" not in st.session_state:
+    st.session_state["document_processed"] = False
+
+if "upload_result" not in st.session_state:
+    st.session_state["upload_result"] = None
 
 
 # ============================================================
@@ -104,9 +129,8 @@ if uploaded_file is not None:
                 response = requests.post(
                     f"{API_URL}/upload",
                     files=files,
-                    timeout=300
+                    timeout=600
                 )
-
 
                 # --------------------------------------------
                 # SUCCESS
@@ -116,23 +140,45 @@ if uploaded_file is not None:
 
                     result = response.json()
 
-                    st.session_state[
-                        "document_processed"
-                    ] = True
-
-                    st.session_state[
-                        "upload_result"
-                    ] = result
-
-                    st.success(
-                        "✅ PDF processed successfully!"
+                    document_id = result.get(
+                        "document_id"
                     )
+
+                    if not document_id:
+
+                        st.error(
+                            "Upload succeeded, but no "
+                            "document_id was returned."
+                        )
+
+                    else:
+
+                        # Save document information
+                        st.session_state[
+                            "document_id"
+                        ] = document_id
+
+                        st.session_state[
+                            "document_processed"
+                        ] = True
+
+                        st.session_state[
+                            "upload_result"
+                        ] = result
+
+                        st.success(
+                            "✅ PDF processed successfully!"
+                        )
+
+                        st.info(
+                            f"Document ID: {document_id}"
+                        )
 
                 else:
 
                     st.error(
                         f"Upload failed: "
-                        f"{response.status_code}"
+                        f"HTTP {response.status_code}"
                     )
 
                     st.code(
@@ -149,10 +195,10 @@ if uploaded_file is not None:
 
 
 # ============================================================
-# SHOW PROCESSING INFORMATION
+# DOCUMENT INFORMATION
 # ============================================================
 
-if "upload_result" in st.session_state:
+if st.session_state["upload_result"] is not None:
 
     result = st.session_state[
         "upload_result"
@@ -167,28 +213,49 @@ if "upload_result" in st.session_state:
     col1, col2, col3, col4 = st.columns(4)
 
     with col1:
+
         st.metric(
             "Pages",
-            result.get("pages", 0)
+            result.get(
+                "pages",
+                0
+            )
         )
 
     with col2:
+
         st.metric(
             "Images",
-            result.get("images", 0)
+            result.get(
+                "images",
+                0
+            )
         )
 
     with col3:
+
         st.metric(
             "Chunks",
-            result.get("chunks", 0)
+            result.get(
+                "chunks",
+                0
+            )
         )
 
     with col4:
+
         st.metric(
             "Vectors",
-            result.get("stored_vectors", 0)
+            result.get(
+                "stored_vectors",
+                0
+            )
         )
+
+    st.caption(
+        f"Current document: "
+        f"{result.get('filename', 'Unknown')}"
+    )
 
 
 # ============================================================
@@ -197,7 +264,9 @@ if "upload_result" in st.session_state:
 
 st.divider()
 
-st.header("💬 Ask a question")
+st.header(
+    "💬 Ask a question"
+)
 
 question = st.text_input(
     "Question",
@@ -223,13 +292,19 @@ if st.button(
             "Please enter a question."
         )
 
-    elif "document_processed" not in st.session_state:
+    elif not st.session_state.get(
+        "document_id"
+    ):
 
         st.warning(
             "Please upload and process a PDF first."
         )
 
     else:
+
+        document_id = st.session_state[
+            "document_id"
+        ]
 
         with st.spinner(
             "🧠 OmniBrain is thinking..."
@@ -240,11 +315,11 @@ if st.button(
                 response = requests.post(
                     f"{API_URL}/chat",
                     json={
-                        "question": question
+                        "question": question,
+                        "document_id": document_id
                     },
-                    timeout=300
+                    timeout=600
                 )
-
 
                 # ----------------------------------------
                 # SUCCESS
@@ -277,7 +352,6 @@ if st.button(
                             "No answer was generated."
                         )
 
-
                     # ----------------------------------------
                     # DEBUG
                     # ----------------------------------------
@@ -289,6 +363,14 @@ if st.button(
                         st.write(
                             "Question:",
                             question
+                        )
+
+                        st.write(
+                            "Document ID:",
+                            result.get(
+                                "document_id",
+                                document_id
+                            )
                         )
 
                         st.write(
@@ -311,7 +393,7 @@ if st.button(
 
                     st.error(
                         f"Chat request failed: "
-                        f"{response.status_code}"
+                        f"HTTP {response.status_code}"
                     )
 
                     st.code(
@@ -321,7 +403,7 @@ if st.button(
             except requests.exceptions.RequestException as e:
 
                 st.error(
-                    "❌ Could not connect to FastAPI."
+                    "❌ Could not connect to the OmniBrain backend."
                 )
 
                 st.exception(e)
