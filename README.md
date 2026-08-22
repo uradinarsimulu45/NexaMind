@@ -127,8 +127,9 @@ The Generation Agent builds a grounded prompt using the retrieved evidence and g
 
 The conversation memory component keeps previous questions and answers available to the application for multi-turn interaction.
 
-📁 Project Structure
+## 📁 Project Structure
 
+```text
 NexaMind/
 │
 ├── backend/
@@ -166,16 +167,19 @@ NexaMind/
 │   │   │
 │   │   └── main.py
 │   │
-│   ├── data/
-│   │   ├── faiss_index/
-│   │   ├── images/
-│   │   └── pdfs/
-│   │
 │   └── requirements.txt
+│
+├── data/
+│   ├── faiss_index/
+│   ├── images/
+│   └── pdfs/
 │
 ├── frontend/
 │   └── streamlit_app.py
 │
+├── .gitignore
+├── .python-version
+├── requirements.txt
 └── README.md
 
 🧰 Technologies Used
